@@ -1,2 +1,2 @@
-# ivae
-Informed Variational Autoencoder
+# dimnet
+deep learning based dimensionality reduction
