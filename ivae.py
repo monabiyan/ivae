@@ -20,6 +20,7 @@ from torch.utils.data import Dataset
 import torch
 import random
 random.seed(1234)
+import torchviz
 
 class MyDataset(Dataset):
     def __init__(self,df,y_label=["Y"] ,mode = 'train'):
@@ -46,7 +47,7 @@ class MyDataset(Dataset):
             return inpt
 
 class IVAE_MOTOR(nn.Module):
-    def __init__(self,input_size,latent_size=20,dropout_rate=0.10):
+    def __init__(self,input_size=20,latent_size=20,dropout_rate=0.10):
         super().__init__()
         self.input_size= input_size
         self.latent_size = latent_size
@@ -178,9 +179,14 @@ class IVAE_MOTOR(nn.Module):
 class IVAE(MyDataset,IVAE_MOTOR):
 #############################################################
     def __init__(self):
-        pass
+        self.df_XY = self.MNIST_data()
+        #obj.organize_data(df_XY)
+        self.input_size = self.df_XY.shape[1]-1
+        IVAE_MOTOR.__init__(self,input_size=self.input_size)
+        MyDataset.__init__(self,df=self.df_XY)
+        self.organize_data()
 #############################################################
-    def model_initialiaze(self,input_size):
+    def model_initialiaze(self):
         self.model=IVAE_MOTOR(input_size = self.input_size).cpu()
 #############################################################        
     def model_save(self,address):
@@ -188,12 +194,15 @@ class IVAE(MyDataset,IVAE_MOTOR):
 #############################################################   
     def model_load(self,address):
         random.seed(1234)
-        self.model_initialiaze(input_size = self.input_size)
+        self.model_initialiaze()
         self.model.load_state_dict(torch.load(address))
 #############################################################   
+    def visualize_model_architecture(self):
+        pass
+############################################################# 
     def plot_residuals(self):
         import matplotlib.pyplot as plt
-        init_index=10
+        init_index=0
         plt.plot(self.train_tracker[init_index:], label='Training Total loss')
         plt.plot(self.test_tracker[init_index:], label='Test Total loss')
         plt.plot(self.test_BCE_tracker[init_index:], label='Test BCE loss')
@@ -216,9 +225,6 @@ class IVAE(MyDataset,IVAE_MOTOR):
         self.df_XY = self.MNIST_data()
         self.organize_data(self.df_XY)
         self.input_size = self.df_XY.shape[1]-1
-        
-        IVAE_MOTOR.__init__(self,input_size=self.input_size)
-        MyDataset.__init__(self,df=self.df_XY)
         
         if model_init:
             self.model_initialiaze(input_size=self.input_size)
@@ -288,11 +294,11 @@ class IVAE(MyDataset,IVAE_MOTOR):
         df_XY=pd.concat([df_X,df_Y],axis=1)
         return(df_XY)
 #############################################################    
-    def organize_data(self,df_XY):
+    def organize_data(self):
         from sklearn.model_selection import train_test_split
-        df_XY = df_XY.sample(frac = 1)
+        self.df_XY = self.df_XY.sample(frac = 1)
         
-        df_XY_train, df_XY_test = train_test_split(df_XY, test_size=0.2, random_state=1234)
+        df_XY_train, df_XY_test = train_test_split(self.df_XY, test_size=0.2, random_state=1234)
         
         data_train = MyDataset(df=df_XY_train,y_label=["Y"])
         data_test = MyDataset(df=df_XY_test,y_label=["Y"])
@@ -402,12 +408,12 @@ class IVAE(MyDataset,IVAE_MOTOR):
           test_KLD_loss_scaled = test_KLD_loss*loss_scale_show/ len(self.testloader.dataset)
           test_CEP_loss_scaled = test_CEP_loss*loss_scale_show/ len(self.testloader.dataset)
           
-          test_tracker.append(test_total_loss_scaled)
-          test_BCE_tracker.append(test_BCE_loss_scaled)
-          test_KLD_tracker.append(test_KLD_loss_scaled)
-          test_CEP_tracker.append(test_CEP_loss_scaled)
+          self.test_tracker.append(test_total_loss_scaled)
+          self.test_BCE_tracker.append(test_BCE_loss_scaled)
+          self.test_KLD_tracker.append(test_KLD_loss_scaled)
+          self.test_CEP_tracker.append(test_CEP_loss_scaled)
           
-          return(test_tracker,test_BCE_tracker,test_KLD_tracker,test_CEP_tracker)
+          #return(test_tracker,test_BCE_tracker,test_KLD_tracker,test_CEP_tracker)
     #############################################################
     def regression_analysis(self,means,labels):
       means_all_test=torch.empty_like(means[0])
@@ -455,6 +461,30 @@ class IVAE(MyDataset,IVAE_MOTOR):
                           )
       ax.add_artist(legend)
       plt.show()
+#############################################################      
+    def display_images_real_vs_synthetic(self,number_class=3,image_number=40,image_shape=28,normalized_factor=256):
+        fig = plt.figure(figsize=(10, 7))
+        self.model.eval()
+        
+        img_real=self.x_last[self.y_last==number_class][image_number].cpu().detach().numpy().reshape(image_shape,image_shape)*normalized_factor
+        fig.add_subplot(3, 1, 1)
+        plt.imshow(img_real,vmin=0,vmax=normalized_factor-1)
+        plt.axis('off')
+        plt.title("Real")
+        
+        
+        img_vae=self.model.decoder(self.miu_last[self.y_last==number_class][image_number:image_number+2]).cpu().detach().numpy().reshape(2,image_shape,image_shape)[0]*normalized_factor
+        fig.add_subplot(3, 1, 2)
+        plt.imshow(img_vae,vmin=0,vmax=normalized_factor-1)
+        plt.axis('off')
+        plt.title("Reconstructed")
+        
+        img_diference=img_real-img_vae
+        fig.add_subplot(3, 1, 3)
+        plt.imshow(img_diference,vmin=0,vmax=normalized_factor-1)
+        plt.axis('off')
+        plt.title("Difference")
+        print("mean difference = "+str(np.mean(np.abs(img_diference))))
 #############################################################
     def distance_kl(self,mean1,std1,mean2,std2):
             n=std1.shape[0]
@@ -619,9 +649,33 @@ class IVAE(MyDataset,IVAE_MOTOR):
             #synthetic_data_all = torch.cat((synthetic_data_all, synthetic_data), 0)
           return(synthetic_data_all)
           #return(synthetic_data)
-#############################################################    
-    
-    
+############################################################# 
+    def traverse(self,number_class,number_of_images,start_id,end_id,file_path_root="traverse",model_name="supervised_"):
+        line_decoded = self.generate_data_linear_from_a_to_b(self.model,self.miu_last,self.y_last,number_class,number_of_images,start_id,end_id)
+        decoded_objects=line_decoded
+        indicator = model_name+str(number_class)+"_"+str(start_id)+"_"+str(end_id)
+        self.save_GIF(decoded_objects,file_path_root,indicator)
+        return(line_decoded)
+#############################################################
+    def traverse_multiple(self,number_class,number_of_images,start_id,end_id,file_path_root="multiple_traverse"):
+        for i in range(10):
+          number_class=2
+          number_of_images=20
+          start_id=10
+          end_id=80+i
+          model_name="supervised_"
+          #model_name="UNsupervised_"
+          line_decoded = self.generate_data_linear_from_a_to_b(self.model,self.miu_last,self.y_last,number_class,number_of_images,start_id,end_id,flat=False)
+          decoded_objects=line_decoded
+          indicator = "multiple_"+model_name+str(number_class)+"_"+str(start_id)+"_"+str(end_id)
+          self.save_GIF(decoded_objects,file_path_root,indicator)
+          print("successful!")
+#############################################################   
+    def append_augmented_data_to_original(self,synthetic_physical_data,number_class,number_of_additional_data):
+        physical_data_all=np.append(self.x_last.cpu().numpy(),synthetic_physical_data,axis=0)
+        physical_data_all_lables=np.append(self.y_last.cpu().numpy(),np.repeat(number_class, number_of_additional_data))
+        self.original_with_augmented_data_all_X=torch.from_numpy(physical_data_all)
+        self.original_with_augmented_data_all_lables=torch.from_numpy(physical_data_all_lables)
     
     
     
