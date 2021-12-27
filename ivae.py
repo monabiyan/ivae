@@ -47,15 +47,15 @@ class MyDataset(Dataset):
             return inpt
 
 class IVAE_MOTOR(nn.Module):
-    def __init__(self,input_size=20,latent_size=20,dropout_rate=0.10):
+    def __init__(self,input_size,latent_size=20,dropout_rate=0.10):
         super().__init__()
-        self.input_size= input_size
         self.latent_size = latent_size
         self.dropout_rate = dropout_rate
-        second_layer_size = int((input_size+latent_size ** 2)/2)
+        self.input_size=input_size
+        second_layer_size = int((self.input_size+latent_size ** 2)/2)
 
         self.encoder = nn.Sequential(
-            nn.Linear(input_size, second_layer_size),
+            nn.Linear(self.input_size, second_layer_size),
             nn.ReLU(),
             nn.BatchNorm1d(second_layer_size),
             nn.Dropout(p=dropout_rate),
@@ -128,7 +128,7 @@ class IVAE_MOTOR(nn.Module):
             nn.Sigmoid(),
             #nn.BatchNorm1d(1000),
             nn.Dropout(p=dropout_rate),
-            nn.Linear(600, input_size)
+            nn.Linear(600, self.input_size)
         )
         
         self.classifier = nn.Sequential (
@@ -168,7 +168,7 @@ class IVAE_MOTOR(nn.Module):
         z = self.reparameterise(mu, logvar)
         y_hat=self.classifier(z)
         x_hat = self.decode(z)
-        return x_hat,y_hat, mu, logvar
+        return x_hat,y_hat, mu, logvar, z
     
     def decoding_from_latent(self, mu, logvar):
         z = self.reparameterise(mu, logvar)
@@ -178,16 +178,27 @@ class IVAE_MOTOR(nn.Module):
   
 class IVAE(MyDataset,IVAE_MOTOR):
 #############################################################
-    def __init__(self):
+    def __init__(self,reconst_coef=100000,kl_coef=0.001*512,classifier_coef=1000):
+        ##########
+        self.reconst_coef = reconst_coef
+        self.kl_coef = kl_coef
+        self.classifier_coef = classifier_coef
+        ##########
         self.df_XY = self.MNIST_data()
+        ##########
         #obj.organize_data(df_XY)
         self.input_size = self.df_XY.shape[1]-1
-        IVAE_MOTOR.__init__(self,input_size=self.input_size)
+        IVAE_MOTOR.__init__(self,self.input_size)
         MyDataset.__init__(self,df=self.df_XY)
         self.organize_data()
 #############################################################
     def model_initialiaze(self):
-        self.model=IVAE_MOTOR(input_size = self.input_size).cpu()
+        self.model=IVAE_MOTOR(self.input_size).cpu()
+        self.train_tracker=[]
+        self.test_tracker=[]
+        self.test_BCE_tracker=[]
+        self.test_KLD_tracker=[]
+        self.test_CEP_tracker=[]
 #############################################################        
     def model_save(self,address):
         torch.save(self.model.state_dict(),address)
@@ -196,13 +207,32 @@ class IVAE(MyDataset,IVAE_MOTOR):
         random.seed(1234)
         self.model_initialiaze()
         self.model.load_state_dict(torch.load(address))
+#############################################################
+    def save_residuals(self,address='residuals.pkl'):
+        import pickle
+        residuals={'train_tracker':self.train_tracker,
+           'test_BCE_tracker':self.test_BCE_tracker,
+           'test_KLD_tracker':self.test_KLD_tracker,
+           'test_CEP_tracker':self.test_CEP_tracker,
+           'test_tracker':self.test_tracker}
+        with open(address, 'wb') as f:
+            pickle.dump(residuals, f)
+#############################################################
+    def load_residuals(self,address='residuals.pkl'):
+        import pickle
+        with open(address, 'rb') as f:
+            residuals = pickle.load(f)
+            self.train_tracker = residuals['train_tracker']
+            self.test_BCE_tracker = residuals['test_BCE_tracker']
+            self.test_KLD_tracker = residuals['test_KLD_tracker']
+            self.test_CEP_tracker = residuals['test_CEP_tracker']
+            self.test_tracker = residuals['test_tracker']
 #############################################################   
     def visualize_model_architecture(self):
         pass
 ############################################################# 
-    def plot_residuals(self):
+    def plot_residuals(self,init_index=0):
         import matplotlib.pyplot as plt
-        init_index=0
         plt.plot(self.train_tracker[init_index:], label='Training Total loss')
         plt.plot(self.test_tracker[init_index:], label='Test Total loss')
         plt.plot(self.test_BCE_tracker[init_index:], label='Test BCE loss')
@@ -241,26 +271,19 @@ class IVAE(MyDataset,IVAE_MOTOR):
         self.optimizer = torch.optim.Adam(self.model.parameters(),lr=learning_rate,weight_decay=2e-5)
         iteration_no = 0
         loss_scale_show = 1
-        
-        self.train_tracker=[]
-        self.test_tracker=[]
-        self.test_BCE_tracker=[]
-        self.test_KLD_tracker=[]
-        self.test_CEP_tracker=[]
-        
         #codes = dict(μ=list(), logσ2=list(), y=list(), x=list())
         for epoch in range(1, epochs+1):
             iteration_no = iteration_no+1
             # train for one epocha
             self.train_total_loss = self.train(self.model)
         
-            self.test_BCE_loss, self.test_KLD_loss, self.test_CEP_loss, self.test_total_loss, self.means, self.logvars, self.labels, self.images = self.test(self.model)
+            self.test_BCE_loss, self.test_KLD_loss, self.test_CEP_loss, self.test_total_loss, self.means, self.logvars, self.labels, self.images,z = self.test(self.model)
             
 
-            self.miu_last = torch.cat(self.means)
-            self.var_last = torch.cat(self.logvars)
-            self.y_last = torch.cat(self.labels)
-            self.x_last = torch.cat(self.images)
+            #self.miu_last = torch.cat(self.means)
+            #self.var_last = torch.cat(self.logvars)
+            #self.y_last = torch.cat(self.labels)
+            #self.x_last = torch.cat(self.images)
         
             train_total_loss_scaled = self.train_total_loss*loss_scale_show/ len(self.trainloader.dataset)
             test_total_loss_scaled = self.test_total_loss*loss_scale_show/ len(self.testloader.dataset)
@@ -274,8 +297,6 @@ class IVAE(MyDataset,IVAE_MOTOR):
             self.test_BCE_tracker.append(test_BCE_loss_scaled)
             self.test_KLD_tracker.append(test_KLD_loss_scaled)
             self.test_CEP_tracker.append(test_CEP_loss_scaled)
-        
-        
             # print the test loss for the epoch
             print(f'====> Epoch: {iteration_no} total_train_loss: {train_total_loss_scaled:.6f} Total_test_loss: {test_total_loss_scaled:.6f} Total_BCE_test_loss: {test_BCE_loss_scaled:.6f} Total_KLD_test_loss: {test_KLD_loss_scaled:.6f} Total_CEP_test_loss: {test_CEP_loss_scaled:.6f}')
           
@@ -296,45 +317,54 @@ class IVAE(MyDataset,IVAE_MOTOR):
 #############################################################    
     def organize_data(self):
         from sklearn.model_selection import train_test_split
-        self.df_XY = self.df_XY.sample(frac = 1)
+        self.df_XY = self.df_XY.sample(frac = 1,random_state=1234)
         
         df_XY_train, df_XY_test = train_test_split(self.df_XY, test_size=0.2, random_state=1234)
         
         data_train = MyDataset(df=df_XY_train,y_label=["Y"])
         data_test = MyDataset(df=df_XY_test,y_label=["Y"])
-        
-        BATCH_SIZE=512
+        import random
+        random.seed(1234)
+        self.BATCH_SIZE=512
         trainloader = torch.utils.data.DataLoader(dataset = data_train,
-                                                   batch_size = BATCH_SIZE,
+                                                   batch_size = self.BATCH_SIZE,
                                                   shuffle=False)
         testloader = torch.utils.data.DataLoader(dataset = data_test,
-                                                  batch_size = BATCH_SIZE,
+                                                  batch_size = self.BATCH_SIZE,
                                                  shuffle=False)
         self.trainloader = trainloader
         self.testloader = testloader
         # Reconstruction + KL divergence losses summed over all elements and batch
     #############################################################
     def loss_function(self,x_hat, x,y_hat,y, mu, logvar):
-        
         # reconstruction loss (pushing the points apart)
         #BCE = nn.functional.binary_cross_entropy(x_hat, x.view(-1, input_size), reduction='sum')
         mse_loss = nn.MSELoss()
         crs_entrpy = nn.CrossEntropyLoss()
+        
+        #BCE = nn.functional.binary_cross_entropy_with_logits(x_hat, x.view(-1, self.input_size))
         BCE = mse_loss(x_hat, x.view(-1, self.input_size))
+        #BCE = F.binary_cross_entropy(x_hat, x.view(-1, self.input_size))
+        
         CEP = crs_entrpy(y_hat.cpu(),y.cpu())
         # KL divergence loss (the relative entropy between two distributions a multivariate gaussian and a normal)
         # (enforce a radius of 1 in each direction + pushing the means towards zero)
-        KLD = 0.5 * torch.sum(logvar.exp() - logvar - 1 + mu.pow(2))
-        KLD=torch.abs(KLD)
-    
-        BCE = BCE*100000
-        KLD = KLD * 0.0001
-        CEP = CEP*10*100
+        #KLD = 0.5 * torch.sum(logvar.exp() - logvar - 1 + mu.pow(2))
+        #KLD=torch.mean(torch.abs(KLD))
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        KLD = KLD/self.BATCH_SIZE
+        #KLD2= torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim = 1), dim = 0)
+        #print(KLD)
+
+        #BCE = BCE*reconst_coef
+        #KLD = KLD * kl_coef
+        #CEP = CEP*classifier_coef
         
     
         #Tot_Loss = BCE + KLD
-        Tot_Loss = BCE + KLD+ CEP
-        return BCE, KLD, CEP, Tot_Loss  # we can use a beta parameter here (BCE + beta * KLD)
+        
+        Tot_Loss = BCE * self.reconst_coef + KLD * self.kl_coef + CEP * self.classifier_coef
+        return BCE * self.reconst_coef, KLD * self.kl_coef, CEP * self.classifier_coef, Tot_Loss  # we can use a beta parameter here (BCE + beta * KLD)
     
     #############################################################   
     # performs one epoch of training and returns the training loss for this epoch
@@ -348,7 +378,7 @@ class IVAE(MyDataset,IVAE_MOTOR):
         y=torch.tensor(torch.reshape(y, (-1,)), dtype=torch.long)
         # ===================forward=====================
         self.optimizer.zero_grad()  # make sure gradients are not accimulated.
-        x_hat,y_hat, mu, logvar = model(x)
+        x_hat,y_hat, mu, logvar,z = model(x)
         BCE_loss, KLD_loss, CEP_loss, total_loss = self.loss_function(x_hat, x,y_hat,y, mu, logvar)
         # ===================backward====================
         #optimizer.zero_grad()
@@ -360,10 +390,13 @@ class IVAE(MyDataset,IVAE_MOTOR):
     # evaluates the model on the test set
     def test(self,model):
       means, logvars, labels, images = list(), list(), list(), list()
+      zs=[]
       test_BCE_loss=0
       test_KLD_loss=0
       test_CEP_loss=0
       test_total_loss = 0
+      import random
+      random.seed(1234)
       with torch.no_grad():
         model.eval()
         for x, y in self.testloader:
@@ -372,7 +405,7 @@ class IVAE(MyDataset,IVAE_MOTOR):
           y=y.cpu()
           y=torch.tensor(torch.reshape(y, (-1,)), dtype=torch.long)
           # forward
-          x_hat,y_hat, mu, logvar = model(x)
+          x_hat,y_hat, mu, logvar,z = model(x)
           BCE_loss, KLD_loss, CEP_loss, total_loss = self.loss_function(x_hat, x, y_hat,y, mu, logvar)
           test_total_loss = test_total_loss + total_loss.item()
           test_BCE_loss = test_BCE_loss + BCE_loss.item()
@@ -383,7 +416,8 @@ class IVAE(MyDataset,IVAE_MOTOR):
           logvars.append(logvar.detach())
           labels.append(y.detach())
           images.append(x.detach())
-      return test_BCE_loss, test_KLD_loss, test_CEP_loss, test_total_loss, means, logvars, labels, images
+          zs.append(z.detach())
+      return test_BCE_loss, test_KLD_loss, test_CEP_loss, test_total_loss, means, logvars, labels, images,zs
     #############################################################
     def generate_test_results(self):
       
@@ -393,15 +427,17 @@ class IVAE(MyDataset,IVAE_MOTOR):
       test_BCE_tracker=[]
       test_KLD_tracker=[]
       test_CEP_tracker=[]
+      z_list=[]
     
       for epoch in range(1):
           # the following line, will read test data from tes
-          test_BCE_loss, test_KLD_loss, test_CEP_loss, test_total_loss, means, logvars, labels, images = self.test(self.model)
+          test_BCE_loss, test_KLD_loss, test_CEP_loss, test_total_loss, means, logvars, labels, images,z = self.test(self.model)
           
           self.miu_last=torch.cat(means)
           self.var_last=torch.cat(logvars)
           self.y_last=torch.cat(labels)
           self.x_last=torch.cat(images)
+          self.zs=torch.cat(z)
     
           test_total_loss_scaled = test_total_loss*loss_scale_show/ len(self.testloader.dataset)
           test_BCE_loss_scaled = test_BCE_loss*loss_scale_show/ len(self.testloader.dataset)
@@ -415,19 +451,28 @@ class IVAE(MyDataset,IVAE_MOTOR):
           
           #return(test_tracker,test_BCE_tracker,test_KLD_tracker,test_CEP_tracker)
     #############################################################
+    def plot_zs_pca2(self):
+        #self.zs
+        #self.y_last
+        pass
+        
+    
+    
     def regression_analysis(self,means,labels):
-      means_all_test=torch.empty_like(means[0])
-      for i in range(len(means)):
-        means_all_test = torch.cat((means_all_test,means[i]),0)
-      means_all_test=means_all_test.cpu().detach().numpy()
-      labels_all_test=torch.empty_like(labels[0])
-      for i in range(len(labels)):
-        labels_all_test = torch.cat((labels_all_test,labels[i]),0)
-      labels_all_test=labels_all_test.cpu().detach().numpy()
+      #means_all_test=torch.empty_like(means[0])
+      #for i in range(len(means)):
+        #means_all_test = torch.cat((means_all_test,means[i]),0)
+      #means_all_test=means_all_test.cpu().detach().numpy()
+      #labels_all_test=torch.empty_like(labels[0])
+      #for i in range(len(labels)):
+        #labels_all_test = torch.cat((labels_all_test,labels[i]),0)
+      #labels_all_test=labels_all_test.cpu().detach().numpy()
+      means_all_test = means.cpu().detach().numpy()
+      labels_all_test = labels.cpu().detach().numpy()
       from sklearn.linear_model import LogisticRegression
-      reg = LogisticRegression().fit(means_all_test, labels_all_test.reshape(-1, 1))
+      reg = LogisticRegression(max_iter=500).fit(means_all_test, labels_all_test.reshape(-1, 1).ravel())
       reg.predict(means_all_test)
-      reg.score(means_all_test, labels_all_test.reshape(-1, 1))
+      print(reg.score(means_all_test, labels_all_test.reshape(-1, 1)))
     #############################################################
     def calculate_lower_dimensions(self,miu_last,y_last,N=1000):
       import random
@@ -579,7 +624,7 @@ class IVAE(MyDataset,IVAE_MOTOR):
         
         return((points_mean_interpolated,points_std_interpolated))
 #############################################################    
-        # Simply traverse between two end points and create some equally spaced points on the line.
+    # Simply traverse between two end points and create some equally spaced points on the line.
     def sample_data_on_a_line(self,x0,x1,number_of_images):
       space_dim=20
       line_distance=x1-x0
@@ -620,7 +665,7 @@ class IVAE(MyDataset,IVAE_MOTOR):
           #file_path = "/content/drive/MyDrive/coh_pm/image.png"
           file_path = file_path_root+indicator+".png"
           #img = plt.figure(figsize = (8,8))
-          plt.imshow(array_, origin = 'lower',vmin=0,vmax=255)
+          plt.imshow(array_, origin = 'lower',vmin=20,vmax=200)
           plt.colorbar(shrink = 0.5)
           plt.savefig(file_path) #Saves each figure as an image
           images.append(imageio.imread(file_path)) #Adds images to list
