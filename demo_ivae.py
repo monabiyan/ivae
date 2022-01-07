@@ -23,8 +23,8 @@ model_file_address='./test_model.pt'
 obj1=ivae.IVAE(reconst_coef=100000,kl_coef=0.0001*512,classifier_coef=1000)
 obj2=ivae.IVAE(reconst_coef=100000,kl_coef=0.0001*512,classifier_coef=0)
 
-save_address1="cls_1000_date_12_23"
-save_address2="cls_0_date_12_23"
+save_address1="cls_1000_date_12_27"
+save_address2="cls_0_date_12_27"
 
 def run(obj,save_address):
     ##########
@@ -38,11 +38,11 @@ def run(obj,save_address):
         
         lr=5e-3
         print(lr)
-        obj.model_training(epochs=100,learning_rate=lr)
+        obj.model_training(epochs=150,learning_rate=lr)
         
         lr=2e-3
         print(lr)
-        obj.model_training(epochs=100,learning_rate=lr)
+        obj.model_training(epochs=150,learning_rate=lr)
         #obj.model_save(address=save_address+".pt")
         #obj.save_residuals(address=save_address+'_residuals.pkl')
         
@@ -74,8 +74,8 @@ def run(obj,save_address):
     #obj.model_save(address=save_address+".pt")
     #obj.save_residuals(address=save_address+'_residuals.pkl')
     ##########
-#run(obj1,save_address1)
-#run(obj2,save_address2)
+run(obj1,save_address1)
+run(obj2,save_address2)
 
 
 ####################
@@ -107,7 +107,7 @@ obj.display_images_real_vs_synthetic(number_class=5,image_number=32,image_shape=
 obj.test_BCE_tracker[-1]
 np.mean(obj.test_BCE_tracker[770:801])
 obj.regression_analysis(obj.zs,obj.y_last)
-obj.plot_residuals(init_index=1)
+obj.plot_residuals(init_index=50)
 
 
 obj=obj2
@@ -118,18 +118,20 @@ obj.generate_test_results()
 obj.display_images_real_vs_synthetic(number_class=5,image_number=32,image_shape=28)
 np.mean(obj.test_BCE_tracker[770:801])
 obj.regression_analysis(obj.zs,obj.y_last)
-obj.plot_residuals(init_index=100)
+obj.plot_residuals(init_index=90)
 
 
-obj.plot_residuals(init_index=1)
-obj.generate_test_results()
+
 
 #obj.regression_analysis(obj.means,obj.labels)
-tsne_mat,umap_mat,Y=obj.calculate_lower_dimensions(obj.zs,obj.y_last,N=10000)
+tsne_mat,umap_mat,pca_mat,Y=obj.calculate_lower_dimensions(obj.zs,obj.y_last,N=10000)
 obj.plot_lower_dimension(tsne_mat,Y,projection='3d')
 obj.plot_lower_dimension(tsne_mat,Y,projection='2d')
 obj.plot_lower_dimension(umap_mat,Y,projection='3d')
 obj.plot_lower_dimension(umap_mat,Y,projection='2d')
+obj.plot_lower_dimension(pca_mat,Y,projection='3d')
+obj.plot_lower_dimension(pca_mat,Y,projection='2d')
+
 
 obj.display_images_real_vs_synthetic(number_class=4,image_number=32,image_shape=28)
 
