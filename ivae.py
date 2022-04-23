@@ -49,11 +49,11 @@ class MyDataset(Dataset):
             return inpt
 
 class IVAE_ARCH(nn.Module):
-    def __init__(self,input_size,n_classes,latent_size=20,dropout_rate=0.10):
+    def __init__(self,input_size,n_classes,dropout_rate=0.10):
         super().__init__()
-        self.latent_size = latent_size
         self.dropout_rate = dropout_rate
         self.input_size=input_size
+        latent_size=self.latent_size
         second_layer_size = int((self.input_size+latent_size ** 2)/2)
 
         self.encoder = nn.Sequential(
@@ -126,11 +126,11 @@ class IVAE_ARCH(nn.Module):
             nn.BatchNorm1d(latent_size ** 2),
             nn.Dropout(p=dropout_rate),
             ##################
-            nn.Linear(latent_size ** 2, 600),
+            nn.Linear(latent_size ** 2, second_layer_size),
             nn.Sigmoid(),
             #nn.BatchNorm1d(1000),
             nn.Dropout(p=dropout_rate),
-            nn.Linear(600, self.input_size)
+            nn.Linear(second_layer_size , self.input_size)
         )
         
         self.classifier = nn.Sequential (
@@ -182,7 +182,7 @@ class IVAE_ARCH(nn.Module):
 class IVAE(MyDataset,IVAE_ARCH):
 #############################################################
 
-    def __init__(self,df_XY,reconst_coef=100000,kl_coef=0.001*512,classifier_coef=1000,test_ratio=0.2):
+    def __init__(self,df_XY,latent_size=20,reconst_coef=100000,kl_coef=0.001*512,classifier_coef=1000,test_ratio=0.2):
         ##########
         self.reconst_coef = reconst_coef
         self.kl_coef = kl_coef
@@ -191,6 +191,7 @@ class IVAE(MyDataset,IVAE_ARCH):
         self.df_XY=df_XY
         #self.df_XY = self.MNIST_data()
         ##########
+        self.latent_size=latent_size
         #obj.organize_data(df_XY)
         self.input_size = self.df_XY.shape[1]-1
         IVAE_ARCH.__init__(self,input_size=self.input_size,n_classes=len(set(list(self.df_XY['Y']))))
