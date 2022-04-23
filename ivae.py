@@ -190,6 +190,8 @@ class IVAE(MyDataset,IVAE_ARCH):
         ##########
         if df_XY is None:
             self.df_XY = self.MNIST_data()
+        else:
+            self.df_XY=df_XY
         ##########
         #obj.organize_data(df_XY)
         self.input_size = self.df_XY.shape[1]-1
