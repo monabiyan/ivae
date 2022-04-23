@@ -22,6 +22,8 @@ import random
 random.seed(1234)
 import torchviz
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class MyDataset(Dataset):
     def __init__(self,df,y_label=["Y"] ,mode = 'train'):
           self.mode = mode    
@@ -47,7 +49,7 @@ class MyDataset(Dataset):
             return inpt
 
 class IVAE_ARCH(nn.Module):
-    def __init__(self,input_size,latent_size=20,dropout_rate=0.10):
+    def __init__(self,input_size,n_classes,latent_size=20,dropout_rate=0.10):
         super().__init__()
         self.latent_size = latent_size
         self.dropout_rate = dropout_rate
@@ -132,7 +134,7 @@ class IVAE_ARCH(nn.Module):
         )
         
         self.classifier = nn.Sequential (
-            nn.Linear(latent_size, 10),
+            nn.Linear(latent_size, n_classes),
             #nn.BatchNorm1d(10),
             nn.Dropout(p = 0.80)
             #nn.Softmax()
@@ -159,7 +161,7 @@ class IVAE_ARCH(nn.Module):
       return self.decoder(z)
 
     def sample(self, n_samples):
-      z = torch.randn((n_samples, self.latent_size)).cpu()
+      z = torch.randn((n_samples, self.latent_size)).to(device)
       return self.decode(z)
 
     def forward(self, x):
@@ -179,22 +181,25 @@ class IVAE_ARCH(nn.Module):
 
 class IVAE(MyDataset,IVAE_ARCH):
 #############################################################
-    def __init__(self,reconst_coef=100000,kl_coef=0.001*512,classifier_coef=1000):
+    def __init__(self,df_XY=None,reconst_coef=100000,kl_coef=0.001*512,classifier_coef=1000,test_ratio=0.2):
+
+
         ##########
         self.reconst_coef = reconst_coef
         self.kl_coef = kl_coef
         self.classifier_coef = classifier_coef
         ##########
-        self.df_XY = self.MNIST_data()
+        if df_XY is None:
+            self.df_XY = self.MNIST_data()
         ##########
         #obj.organize_data(df_XY)
         self.input_size = self.df_XY.shape[1]-1
-        IVAE_ARCH.__init__(self,self.input_size)
+        IVAE_ARCH.__init__(self,input_size=self.input_size,n_classes=len(set(list(self.df_XY['Y']))))
         MyDataset.__init__(self,df=self.df_XY)
-        self.organize_data()
+        self.organize_data(test_ratio)
 #############################################################
     def model_initialiaze(self):
-        self.model=IVAE_ARCH(self.input_size).cpu()
+        self.model=IVAE_ARCH(input_size=self.input_size,n_classes=len(set(list(self.df_XY['Y'])))).to(device)
         self.train_tracker=[]
         self.test_tracker=[]
         self.test_BCE_tracker=[]
@@ -249,9 +254,6 @@ class IVAE(MyDataset,IVAE_ARCH):
                  epochs=1000,
                  learning_rate= 1e-4,
                  model_file_address='./test_model.pt'):
-        
-        
-        
         # Training the model
         self.df_XY = self.MNIST_data()
         self.organize_data(self.df_XY)
@@ -264,8 +266,6 @@ class IVAE(MyDataset,IVAE_ARCH):
         self.model_save(address=model_file_address)
         self.model_load(address=model_file_address)
         self.plot_residuals()
-        
-        
 #############################################################
     def model_training(self,epochs,learning_rate):
         self.learning_rate = learning_rate
@@ -277,10 +277,7 @@ class IVAE(MyDataset,IVAE_ARCH):
             iteration_no = iteration_no+1
             # train for one epocha
             self.train_total_loss = self.train(self.model)
-        
             self.test_BCE_loss, self.test_KLD_loss, self.test_CEP_loss, self.test_total_loss, self.means, self.logvars, self.labels, self.images,z = self.test(self.model)
-            
-
             #self.miu_last = torch.cat(self.means)
             #self.var_last = torch.cat(self.logvars)
             #self.y_last = torch.cat(self.labels)
@@ -316,11 +313,15 @@ class IVAE(MyDataset,IVAE_ARCH):
         df_XY=pd.concat([df_X,df_Y],axis=1)
         return(df_XY)
 #############################################################    
-    def organize_data(self):
+    def organize_data(self,test_ratio):
         from sklearn.model_selection import train_test_split
-        self.df_XY = self.df_XY.sample(frac = 1,random_state=1234)
-        
-        df_XY_train, df_XY_test = train_test_split(self.df_XY, test_size=0.2, random_state=1234)
+        if (test_ratio==1):
+            df_XY_train = self.df_XY
+            df_XY_test = self.df_XY
+        else:   
+            self.df_XY = self.df_XY.sample(frac = 1,random_state=1234)
+            
+            df_XY_train, df_XY_test = train_test_split(self.df_XY, test_size=test_ratio, random_state=1234)
         
         data_train = MyDataset(df=df_XY_train,y_label=["Y"])
         data_test = MyDataset(df=df_XY_test,y_label=["Y"])
@@ -346,8 +347,7 @@ class IVAE(MyDataset,IVAE_ARCH):
         #BCE = nn.functional.binary_cross_entropy_with_logits(x_hat, x.view(-1, self.input_size))
         BCE = mse_loss(x_hat, x.view(-1, self.input_size))
         #BCE = F.binary_cross_entropy(x_hat, x.view(-1, self.input_size))
-        
-        CEP = crs_entrpy(y_hat.cpu(),y.cpu())
+        CEP = crs_entrpy(y_hat.to(device),y.to(device))
         # KL divergence loss (the relative entropy between two distributions a multivariate gaussian and a normal)
         # (enforce a radius of 1 in each direction + pushing the means towards zero)
         #KLD = 0.5 * torch.sum(logvar.exp() - logvar - 1 + mu.pow(2))
@@ -373,9 +373,9 @@ class IVAE(MyDataset,IVAE_ARCH):
       model.train()
       train_loss = 0
       for x, y in self.trainloader:
-        x = x.cpu()
-        y = y.cpu()
-        y=y.cpu()
+        x = x.to(device)
+        y = y.to(device)
+        y=y.to(device)
         y=torch.tensor(torch.reshape(y, (-1,)), dtype=torch.long)
         # ===================forward=====================
         self.optimizer.zero_grad()  # make sure gradients are not accimulated.
@@ -401,9 +401,9 @@ class IVAE(MyDataset,IVAE_ARCH):
       with torch.no_grad():
         model.eval()
         for x, y in self.testloader:
-          x = x.cpu()
-          y = y.cpu()
-          y=y.cpu()
+          x = x.to(device)
+          y = y.to(device)
+          y=y.to(device)
           y=torch.tensor(torch.reshape(y, (-1,)), dtype=torch.long)
           # forward
           x_hat,y_hat, mu, logvar,z = model(x)
@@ -452,6 +452,40 @@ class IVAE(MyDataset,IVAE_ARCH):
           
           #return(test_tracker,test_BCE_tracker,test_KLD_tracker,test_CEP_tracker)
     #############################################################
+    #############################################################
+    def generate_test_results(self):
+      
+      loss_scale_show=1
+    
+      test_tracker=[]
+      test_BCE_tracker=[]
+      test_KLD_tracker=[]
+      test_CEP_tracker=[]
+      z_list=[]
+    
+      for epoch in range(1):
+          # the following line, will read test data from tes
+          test_BCE_loss, test_KLD_loss, test_CEP_loss, test_total_loss, means, logvars, labels, images,z = self.test(self.model)
+          
+          self.miu_last=torch.cat(means)
+          self.var_last=torch.cat(logvars)
+          self.y_last=torch.cat(labels)
+          self.x_last=torch.cat(images)
+          self.zs=torch.cat(z)
+    
+          test_total_loss_scaled = test_total_loss*loss_scale_show/ len(self.testloader.dataset)
+          test_BCE_loss_scaled = test_BCE_loss*loss_scale_show/ len(self.testloader.dataset)
+          test_KLD_loss_scaled = test_KLD_loss*loss_scale_show/ len(self.testloader.dataset)
+          test_CEP_loss_scaled = test_CEP_loss*loss_scale_show/ len(self.testloader.dataset)
+          
+          self.test_tracker.append(test_total_loss_scaled)
+          self.test_BCE_tracker.append(test_BCE_loss_scaled)
+          self.test_KLD_tracker.append(test_KLD_loss_scaled)
+          self.test_CEP_tracker.append(test_CEP_loss_scaled)
+          
+          #return(test_tracker,test_BCE_tracker,test_KLD_tracker,test_CEP_tracker)
+    #############################################################
+
     def plot_zs_pca2(self):
         #self.zs
         #self.y_last
@@ -471,7 +505,7 @@ class IVAE(MyDataset,IVAE_ARCH):
       means_all_test = means.cpu().detach().numpy()
       labels_all_test = labels.cpu().detach().numpy()
       from sklearn.linear_model import LogisticRegression
-      reg = LogisticRegression(max_iter=500).fit(means_all_test, labels_all_test.reshape(-1, 1).ravel())
+      reg = LogisticRegression(solver='liblinear',max_iter=500).fit(means_all_test, labels_all_test.reshape(-1, 1).ravel())
       reg.predict(means_all_test)
       print(reg.score(means_all_test, labels_all_test.reshape(-1, 1)))
     #############################################################
@@ -494,21 +528,32 @@ class IVAE(MyDataset,IVAE_ARCH):
       E_PCA=pca.fit_transform(X.cpu())
       return(E_TSNE,E_UMAP,E_PCA,Y)
     #############################################################
-    def plot_lower_dimension(self,EE,Y,projection='2d'):
+    def plot_lower_dimension(self,EE,Y,size_dot=1,projection='2d',save_str='myplot.pdf'):
+      
       if projection == '2d':
         ax = plt.axes()
-        sc=ax.scatter(EE[:,0], EE[:,1],c=Y,marker=".",cmap='tab20')
+        sc=ax.scatter(EE[:,0], EE[:,1],s=size_dot,c=Y,marker=".",cmap='tab20')
       elif projection == '3d':
         ax = plt.axes(projection='3d')
-        sc=ax.scatter(EE[:,0], EE[:,1],EE[:,2],c=Y,marker=".",cmap='tab20')
-      legend = ax.legend(*sc.legend_elements(),
-                          title="number",
+        sc=ax.scatter(EE[:,0], EE[:,1],EE[:,2],s=size_dot,c=Y,marker=".",cmap='tab20')
+        # Hide grid lines
+        ax.grid(False)
+        # Hide axes ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+       
+      legend = ax.legend(handles=sc.legend_elements()[1],
+                          title="class",
                           framealpha=0,
-                          ncol=4,
-                          loc=3,
+                          ncol=10,
+                          #loc=2,
                           fontsize='xx-small'
                           )
       ax.add_artist(legend)
+      
+      #ax.legend()
+      plt.savefig(save_str)
       plt.show()
 #############################################################      
     def display_images_real_vs_synthetic(self,number_class=3,image_number=40,image_shape=28,normalized_factor=256):
@@ -640,11 +685,11 @@ class IVAE(MyDataset,IVAE_ARCH):
       line=line.cpu()
       return(line)
 #############################################################
-    def generate_data_linear_from_a_to_b(self,model,miu_last,y_last,number_class,number_of_images,start_id,end_id,flat=False):
+    def generate_data_linear_from_a_to_b(self,model,miu_last,y_last,number_of_images,start_id,end_id,flat=False):
       model.eval()
       with torch.no_grad():
-        x0=miu_last[y_last==number_class][start_id]
-        x1=miu_last[y_last==number_class][end_id]
+        x0=miu_last[start_id]
+        x1=miu_last[end_id]
         line = self.sample_data_on_a_line(x0,x1,number_of_images)
         if (flat):
           line_decoded = np.fliplr(((model.decoder(line).cpu().detach().numpy())))
@@ -679,7 +724,7 @@ class IVAE(MyDataset,IVAE_ARCH):
       os.remove(file_path)
       imageio.mimsave(file_path_root +indicator+ ".gif", images, fps=speed) #Creates gif out of list of images
 #############################################################    
-    def generate_synthetic_data(self,model,miu_last,y_last,number_class,number_of_additional_data):
+    def generate_synthetic_data(self,model,miu_last,y_last,number_of_additional_data):
           import numpy as np
           number_of_images_per_traversal=20
         
@@ -689,7 +734,7 @@ class IVAE(MyDataset,IVAE_ARCH):
             m = np.random.choice(range(500), 2, replace=False) 
             start_id = m[0]
             end_id = m[1]
-            synthetic_data = self.generate_data_linear_from_a_to_b(model,miu_last,y_last,number_class,number_of_images_per_traversal,start_id,end_id,flat=True)
+            synthetic_data = self.generate_data_linear_from_a_to_b(model,miu_last,y_last,number_of_images_per_traversal,start_id,end_id,flat=True)
         
             if (i==0):
               synthetic_data_all=synthetic_data
@@ -699,11 +744,12 @@ class IVAE(MyDataset,IVAE_ARCH):
           return(synthetic_data_all)
           #return(synthetic_data)
 ############################################################# 
-    def traverse(self,number_class,number_of_images,start_id,end_id,file_path_root="traverse",model_name="supervised_"):
-        line_decoded = self.generate_data_linear_from_a_to_b(self.model,self.miu_last,self.y_last,number_class,number_of_images,start_id,end_id)
+    def traverse(self,number_of_images,start_id,end_id,file_path_root="traverse",model_name="supervised_",flat=True):
+        line_decoded = self.generate_data_linear_from_a_to_b(self.model,self.miu_last,self.y_last,number_of_images,start_id,end_id,flat=flat)
         decoded_objects=line_decoded
-        indicator = model_name+str(number_class)+"_"+str(start_id)+"_"+str(end_id)
-        self.save_GIF(decoded_objects,file_path_root,indicator)
+        indicator = model_name+"_"+str(start_id)+"_"+str(end_id)
+        if (flat==False):
+            self.save_GIF(decoded_objects,file_path_root,indicator)
         return(line_decoded)
 #############################################################
     def traverse_multiple(self,number_class,number_of_images,start_id,end_id,file_path_root="multiple_traverse"):
@@ -725,8 +771,6 @@ class IVAE(MyDataset,IVAE_ARCH):
         physical_data_all_lables=np.append(self.y_last.cpu().numpy(),np.repeat(number_class, number_of_additional_data))
         self.original_with_augmented_data_all_X=torch.from_numpy(physical_data_all)
         self.original_with_augmented_data_all_lables=torch.from_numpy(physical_data_all_lables)
-    
-    
 #############################################################
 #############################################################
 class CLS_ARCH(nn.Module):
@@ -981,6 +1025,78 @@ class CLS(MyDataset,CLS_ARCH):
         # Done
         return images 
     
+############################################ 
+############################################ 
+############################################    
+class Utils():
+ def linear_traversal_original_coordinates(self):
+    from keras.datasets import mnist
+    (train_X, train_y), (test_X, test_y) = mnist.load_data()
     
+    from matplotlib import pyplot
     
+    three=train_X[train_y==3,]
+    pyplot.imshow(three[1], cmap=pyplot.get_cmap('gray'))
+    pyplot.show()
     
+    pyplot.imshow(three[2], cmap=pyplot.get_cmap('gray'))
+    pyplot.show()
+    
+    delta=(three[2]-three[1])/10
+    for i in range(11):
+        pyplot.imshow(three[1]+(i)*delta, cmap=pyplot.get_cmap('gray'))
+        pyplot.show()
+ def linear_traverse_original_space(x0_png_address,x1_png_address,output_address,number_of_images=20):
+     
+     from PIL import Image
+     import numpy as np
+     import matplotlib.pyplot as plt
+     import imageio
+     import os
+     
+     x0 = Image.open(x0_png_address)
+     x0 = x0.convert('L')
+     x0 = np.array(x0)
+     x0=x0.astype(np.int16)
+     
+     x1 = Image.open(x1_png_address)
+     x1 = x1.convert('L')
+     x1=np.array(x1)
+     x1=x1.astype(np.int16)
+     
+
+     line = np.zeros((number_of_images+1,x0.shape[0], x0.shape[1]))
+     delta=(x1-x0)/number_of_images
+     
+     for i in range(number_of_images+1):
+         print(i)
+         line[i]=x0+i*delta
+         
+     plt.imshow(line[20], origin = 'lower')
+     plt.imshow(delta, origin = 'lower')
+     
+     
+
+
+    #line=line+np.random.rand(21, 168, 168)*20
+     images = []
+    
+     for array_ in line:
+        #file_path = "/content/drive/MyDrive/coh_pm/image.png"
+        file_path = './'
+        #img = plt.figure(figsize = (8,8))
+        plt.imshow(array_)
+        plt.colorbar(shrink = 0.5)
+        plt.savefig(file_path) #Saves each figure as an image
+        images.append(imageio.imread(file_path)) #Adds images to list
+        plt.clf()
+      
+     plt.close()
+
+     os.remove(file_path)
+     imageio.mimsave(output_address+'.gif', images, fps=7)
+    
+############################################ 
+############################################ 
+############################################     
+

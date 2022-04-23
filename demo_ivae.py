@@ -23,8 +23,8 @@ model_file_address='./test_model.pt'
 obj1=ivae.IVAE(reconst_coef=100000,kl_coef=0.0001*512,classifier_coef=1000)
 obj2=ivae.IVAE(reconst_coef=100000,kl_coef=0.0001*512,classifier_coef=0)
 
-save_address1="cls_1000_date_12_27"
-save_address2="cls_0_date_12_27"
+save_address1="result_files/cls_1000_date_12_27"
+save_address2="result_files/cls_0_date_12_27"
 
 def run(obj,save_address):
     ##########
@@ -74,8 +74,8 @@ def run(obj,save_address):
     #obj.model_save(address=save_address+".pt")
     #obj.save_residuals(address=save_address+'_residuals.pkl')
     ##########
-run(obj1,save_address1)
-run(obj2,save_address2)
+#run(obj1,save_address1)
+#run(obj2,save_address2)
 
 
 ####################
@@ -84,8 +84,9 @@ save_address=save_address1
 obj1.model_load(address=save_address+".pt")
 obj1.load_residuals(address=save_address+'_residuals.pkl')
 obj1.generate_test_results()
+
 for i in range(10): 
-    line_decoded = obj1.traverse(number_class=i, number_of_images=21, start_id=2, end_id=10,model_name="supervised_")
+    line_decoded = obj1.traverse(number_of_images=21, start_id=2, end_id=10, model_name="supervised_")
 ####################
 
 ####################
@@ -120,17 +121,35 @@ np.mean(obj.test_BCE_tracker[770:801])
 obj.regression_analysis(obj.zs,obj.y_last)
 obj.plot_residuals(init_index=90)
 
-
+import matplotlib.pyplot as plt
 
 
 #obj.regression_analysis(obj.means,obj.labels)
-tsne_mat,umap_mat,pca_mat,Y=obj.calculate_lower_dimensions(obj.zs,obj.y_last,N=10000)
-obj.plot_lower_dimension(tsne_mat,Y,projection='3d')
-obj.plot_lower_dimension(tsne_mat,Y,projection='2d')
-obj.plot_lower_dimension(umap_mat,Y,projection='3d')
-obj.plot_lower_dimension(umap_mat,Y,projection='2d')
-obj.plot_lower_dimension(pca_mat,Y,projection='3d')
-obj.plot_lower_dimension(pca_mat,Y,projection='2d')
+tsne_mat1,umap_mat1,pca_mat1,Y1=obj1.calculate_lower_dimensions(obj1.zs,obj1.y_last,N=10000)
+tsne_mat2,umap_mat2,pca_mat2,Y2=obj2.calculate_lower_dimensions(obj2.zs,obj2.y_last,N=10000)
+
+
+obj=obj1
+tsne_mat=tsne_mat1
+umap_mat=umap_mat1
+pca_mat=pca_mat1
+Y=Y1
+
+
+obj=obj2
+tsne_mat=tsne_mat2
+umap_mat=umap_mat2
+pca_mat=pca_mat2
+Y=Y2
+
+
+
+obj.plot_lower_dimension(tsne_mat,Y,projection='3d',size_dot=20)
+obj.plot_lower_dimension(tsne_mat,Y,projection='2d',size_dot=20)
+obj.plot_lower_dimension(umap_mat,Y,projection='3d',size_dot=30)
+obj.plot_lower_dimension(umap_mat,Y,projection='2d',size_dot=30)
+obj.plot_lower_dimension(pca_mat,Y,projection='3d',size_dot=3)
+obj.plot_lower_dimension(pca_mat,Y,projection='2d',size_dot=3)
 
 
 obj.display_images_real_vs_synthetic(number_class=4,image_number=32,image_shape=28)
