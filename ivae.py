@@ -558,7 +558,7 @@ class IVAE(MyDataset,IVAE_ARCH):
                           #ncol=10
                           #loc=2,
                           #fontsize='xx-small'
-                          )
+      #                   )
       #ax.add_artist(legend)
       
       ax.legend()
