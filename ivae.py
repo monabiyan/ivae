@@ -552,16 +552,16 @@ class IVAE(MyDataset,IVAE_ARCH):
         ax.set_yticks([])
         ax.set_zticks([])
        
-      legend = ax.legend(handles=sc.legend_elements()[1],
-                          title="class"
+      #legend = ax.legend(#handles=sc.legend_elements()[1],
+                          #title="class"
                           #framealpha=0,
                           #ncol=10
                           #loc=2,
                           #fontsize='xx-small'
                           )
-      ax.add_artist(legend)
+      #ax.add_artist(legend)
       
-      #ax.legend()
+      ax.legend()
       plt.savefig(save_str)
       plt.show()
 #############################################################      
