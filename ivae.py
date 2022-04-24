@@ -49,11 +49,10 @@ class MyDataset(Dataset):
             return inpt
 
 class IVAE_ARCH(nn.Module):
-    def __init__(self,input_size,n_classes,dropout_rate=0.10):
+    def __init__(self,input_size,n_classes,latent_size,dropout_rate=0.10):
         super().__init__()
         self.dropout_rate = dropout_rate
         self.input_size=input_size
-        latent_size=self.latent_size
         second_layer_size = int((self.input_size+latent_size ** 2)/2)
 
         self.encoder = nn.Sequential(
@@ -194,7 +193,13 @@ class IVAE(MyDataset,IVAE_ARCH):
         self.latent_size=latent_size
         #obj.organize_data(df_XY)
         self.input_size = self.df_XY.shape[1]-1
-        IVAE_ARCH.__init__(self,input_size=self.input_size,n_classes=len(set(list(self.df_XY['Y']))))
+
+        IVAE_ARCH.__init__(self,
+            input_size=self.input_size,
+            n_classes=len(set(list(self.df_XY['Y']))),
+            latent_size=self.latent_size
+            )
+        
         MyDataset.__init__(self,df=self.df_XY)
         self.organize_data(test_ratio)
 #############################################################
