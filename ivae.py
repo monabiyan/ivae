@@ -51,6 +51,7 @@ class MyDataset(Dataset):
 class IVAE_ARCH(nn.Module):
     def __init__(self,input_size,n_classes,latent_size,dropout_rate=0.10):
         super().__init__()
+        self.latent_size=latent_size
         self.dropout_rate = dropout_rate
         self.input_size=input_size
         second_layer_size = int((self.input_size+latent_size ** 2)/2)
