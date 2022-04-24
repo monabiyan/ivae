@@ -539,31 +539,31 @@ class IVAE(MyDataset,IVAE_ARCH):
     #############################################################
     def plot_lower_dimension(self,EE,Y,size_dot=1,projection='2d',save_str='myplot.pdf'):
       
-      if projection == '2d':
-        ax = plt.axes()
-        sc=ax.scatter(EE[:,0], EE[:,1],s=size_dot,c=Y,marker=".",cmap='tab20')
-      elif projection == '3d':
-        ax = plt.axes(projection='3d')
-        sc=ax.scatter(EE[:,0], EE[:,1],EE[:,2],s=size_dot,c=Y,marker=".",cmap='tab20')
-        # Hide grid lines
-        ax.grid(False)
-        # Hide axes ticks
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_zticks([])
-       
-      #legend = ax.legend(#handles=sc.legend_elements()[1],
+        if projection == '2d':
+            ax = plt.axes()
+            sc=ax.scatter(EE[:,0], EE[:,1],s=size_dot,c=Y,marker=".",cmap='tab20')
+        elif projection == '3d':
+            ax = plt.axes(projection='3d')
+            sc=ax.scatter(EE[:,0], EE[:,1],EE[:,2],s=size_dot,c=Y,marker=".",cmap='tab20')
+            # Hide grid lines
+            ax.grid(False)
+            # Hide axes ticks
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+
+        #legend = ax.legend(#handles=sc.legend_elements()[1],
                           #title="class"
                           #framealpha=0,
                           #ncol=10
                           #loc=2,
                           #fontsize='xx-small'
-      #                   )
-      #ax.add_artist(legend)
-      
-      ax.legend()
-      plt.savefig(save_str)
-      plt.show()
+        #                   )
+        #ax.add_artist(legend)
+
+        ax.legend()
+        plt.savefig(save_str)
+        plt.show()
 #############################################################      
     def display_images_real_vs_synthetic(self,number_class=3,image_number=40,image_shape=28,normalized_factor=256):
         fig = plt.figure(figsize=(10, 7))
