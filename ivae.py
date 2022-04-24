@@ -553,11 +553,11 @@ class IVAE(MyDataset,IVAE_ARCH):
         ax.set_zticks([])
        
       legend = ax.legend(handles=sc.legend_elements()[1],
-                          title="class",
-                          framealpha=0,
-                          ncol=10,
+                          title="class"
+                          #framealpha=0,
+                          #ncol=10
                           #loc=2,
-                          fontsize='xx-small'
+                          #fontsize='xx-small'
                           )
       ax.add_artist(legend)
       
