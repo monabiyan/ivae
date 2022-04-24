@@ -204,7 +204,10 @@ class IVAE(MyDataset,IVAE_ARCH):
         self.organize_data(test_ratio)
 #############################################################
     def model_initialiaze(self):
-        self.model=IVAE_ARCH(input_size=self.input_size,n_classes=len(set(list(self.df_XY['Y'])))).to(device)
+        self.model=IVAE_ARCH(input_size=self.input_size,
+            n_classes=len(set(list(self.df_XY['Y']))),
+            latent_size=self.latent_size
+            ).to(device)
         self.train_tracker=[]
         self.test_tracker=[]
         self.test_BCE_tracker=[]
