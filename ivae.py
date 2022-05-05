@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 import torch
 import random
 random.seed(1234)
-import torchviz
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -142,7 +142,7 @@ class IVAE_ARCH(nn.Module):
     def reparameterise(self, mu, logvar):
         #if self.training:
         if True:
-            std = torch.exp(logvar / 2)
+            std = torch.exp(logvar / 2)+0.0000001
             q = torch.distributions.Normal(mu, std)
             z = q.rsample()
             #std = logvar.mul(0.5).exp_()
