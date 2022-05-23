@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 import torch
 import random
 random.seed(1234)
-import torchviz
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -142,7 +142,7 @@ class IVAE_ARCH(nn.Module):
     def reparameterise(self, mu, logvar):
         #if self.training:
         if True:
-            std = torch.exp(logvar / 2)
+            std = torch.exp(logvar / 2)+0.0000001
             q = torch.distributions.Normal(mu, std)
             z = q.rsample()
             #std = logvar.mul(0.5).exp_()
@@ -245,7 +245,7 @@ class IVAE(MyDataset,IVAE_ARCH):
     def visualize_model_architecture(self):
         pass
 ############################################################# 
-    def plot_residuals(self,init_index=0):
+    def plot_residuals(self,init_index=0,save_fig_address="./residuals.pdf"):
         import matplotlib.pyplot as plt
         plt.plot(self.train_tracker[init_index:], label='Training Total loss')
         plt.plot(self.test_tracker[init_index:], label='Test Total loss')
@@ -254,6 +254,7 @@ class IVAE(MyDataset,IVAE_ARCH):
         plt.plot(self.test_CEP_tracker[init_index:], label='Test CEP loss')
         plt.legend()
         plt.show()
+        plt.savefig(save_fig_address)
         
 #############################################################        
     def pipeline(self,
