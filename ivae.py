@@ -198,8 +198,7 @@ class IVAE(MyDataset,IVAE_ARCH):
         IVAE_ARCH.__init__(self,
             input_size=self.input_size,
             n_classes=len(set(list(self.df_XY['Y']))),
-            latent_size=self.latent_size
-            )
+            latent_size=self.latent_size)
         
         MyDataset.__init__(self,df=self.df_XY)
         self.organize_data(test_ratio)
@@ -350,11 +349,12 @@ class IVAE(MyDataset,IVAE_ARCH):
     def loss_function(self,x_hat, x,y_hat,y, mu, logvar):
         # reconstruction loss (pushing the points apart)
         #BCE = nn.functional.binary_cross_entropy(x_hat, x.view(-1, input_size), reduction='sum')
-        mse_loss = nn.MSELoss()
+        #mse_loss = nn.MSELoss()
+        mae_loss = nn.L1Loss()
         crs_entrpy = nn.CrossEntropyLoss()
         
         #BCE = nn.functional.binary_cross_entropy_with_logits(x_hat, x.view(-1, self.input_size))
-        BCE = mse_loss(x_hat, x.view(-1, self.input_size))
+        BCE = mae_loss(x_hat, x.view(-1, self.input_size))
         #BCE = F.binary_cross_entropy(x_hat, x.view(-1, self.input_size))
         CEP = crs_entrpy(y_hat.to(device),y.to(device))
         # KL divergence loss (the relative entropy between two distributions a multivariate gaussian and a normal)
