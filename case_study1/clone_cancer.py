@@ -4,8 +4,27 @@ import ivae
 import pandas as pd
 import numpy as np
 ##############################################################
-ant=pd.read_csv("./sc_annotations_final.csv")
-sc_df_filtered2=pd.read_csv("./sc_counts_filtered_final.csv")
+'''
+ant = pd.read_csv("/Users/mnabian/Documents/GitHub/ivae/sc_annotations_final.csv")
+for c in ant.columns.tolist():
+    print(c)
+ant['site'].unique()
+ant['site_id']=ant['site']
+ant.loc[ant['site_id']=='normal tissue adjacent to neoplasm',['site_id']]=0
+ant.loc[ant['site_id']=='tumour border',['site_id']]=5
+ant.loc[ant['site_id']=='tumour core',['site_id']]=10
+sc_df_filtered2=pd.read_csv("/Users/mnabian/Documents/GitHub/sc_data/sc_counts_filtered_final.csv")
+sc_df_filtered2['YY']=ant['site_id']
+sc_df_filtered2.to_csv("/Users/mnabian/Documents/GitHub/sc_data/sc_counts_filtered_final.csv")
+'''
+
+sc_df_filtered2=pd.read_csv("/Users/mnabian/Documents/GitHub/sc_data/sc_counts_filtered_final.csv")
+
+for c in sc_df_filtered2.columns.tolist():
+    print(c)
+    break
+#ant=ant.loc[:,['cells','site']]
+
 ##############################################################
 ##############################################################
 ##############################################################
@@ -29,9 +48,11 @@ gene_symbol_to_id(['COL15A1'])
 ##############################################################
 ##############################################################   
 df_XY=sc_df_filtered2
-labels=df_XY['Y'].tolist()
-df_XY=df_XY/1000000
-df_XY['Y']=labels
+labels1=df_XY['Y'].tolist()
+labels2=df_XY['YY'].tolist()
+df_XY=df_XY/100000
+df_XY['Y']=labels1
+df_XY=df_XY.drop(columns=['YY'])
 df_XY.shape
 df_XY.head()
 ##############################################################   
@@ -118,10 +139,13 @@ ant.loc[ant['site']=='normal tissue adjacent to neoplasm'].loc[ant['celltype_id'
 ant.loc[ant['site']=='tumour core'].loc[ant['celltype_id']==3]['index_no']
 
 
+ant_df=pd.DataFrame({'Y':labels1,'YY':labels2,'index':list(range(0, len(labels1)))})
 def mean_traversal(cell_type_id):
     import random
-    healthy = list(ant.loc[ant['site']=='normal tissue adjacent to neoplasm'].loc[ant['celltype_id']==cell_type_id]['index_no'])
-    cancer = list(ant.loc[ant['site']=='tumour core'].loc[ant['celltype_id']==cell_type_id]['index_no'])
+    healthy = list(ant_df.loc[ant_df['YY']==0].loc[ant_df['Y']==cell_type_id]['index'])
+    cancer = list(ant_df.loc[ant_df['YY']==10].loc[ant_df['Y']==cell_type_id]['index'])
+    #healthy = [i for i, x in enumerate(YY) if x == 0]
+    #cancer = [i for i, x in enumerate(YY) if x == 10]
     print(len(healthy),len(cancer))
     h_max=min(50,len(healthy))
     c_max=min(50,len(cancer))
@@ -146,57 +170,75 @@ def mean_traversal(cell_type_id):
     print(line_decoded_med)
     
     gg_med=pd.DataFrame(line_decoded_med)
-    gg_med.columns=sc_df_filtered2.columns[0:-1]
+    gg_med.columns=df_XY.columns[0:-1]
     
     gg_mean=pd.DataFrame(line_decoded_mean)
-    gg_mean.columns=sc_df_filtered2.columns[0:-1]
+    gg_mean.columns=df_XY.columns[0:-1]
     
     gg_std=pd.DataFrame(line_decoded_std)
-    gg_std.columns=sc_df_filtered2.columns[0:-1]
+    gg_std.columns=df_XY.columns[0:-1]
     
     #gg= gg.div(gg.iloc[0])
     return(gg_med,gg_mean,gg_std)
     #return(line_decoded)
     
+ff=dict()
+ff['mean']=dict()
+ff['med']=dict()
+ff['std']=dict()
+
+for i in range(len(set(ant_df['Y']))):
+    print(i)
+    ff['mean'][str(i)],ff['med'][str(i)],ff['std'][str(i)]=mean_traversal(i)
+
+import pickle
+with open('results_dict.pkl', 'wb') as f:
+    pickle.dump(ff, f)
+        
+with open('results_dict.pkl', 'rb') as f:
+    ff = pickle.load(f)
+
+
+
 
 
 def find_celltype_from_id(k):
     return(list(ant.loc[ant['celltype_id']==k,['celltype_ontology']]['celltype_ontology'])[0])
 
 def plt_gene(mm,g_symbol,gene_id):
-    plt.plot(mm[gene_id],label=g_symbol)
+    
     plt.xlabel("healthy to cancer")
     plt.legend()
     
 import matplotlib.pyplot as plt
-intertested_genes=["COL15A1","RHOB","HSPG2","SERPINE1","COL4A2","LAMA4"
-                   ,"COL4A1","SPARC","PFN1","LGALS1","S100A6","KLF6","HTRA1"]
 
 down_genes=[""]
 
 
-ff_med,ff_mean,ff_std=mean_traversal(3)
-ff_med
+
+intertested_genes=["COL15A1","RHOB","HSPG2","SERPINE1","COL4A2","LAMA4"
+                   ,"COL4A1","SPARC","PFN1","LGALS1","S100A6","KLF6","HTRA1"]
 
 
-
-for k in [3]:
-    ff_med,ff_mean,ff_std = mean_traversal(k)
-    for g in intertested_genes:
-        print(g)
-        g_id=gene_symbol_to_id(g)[0]['ensembl']['gene']
-        print(g_id)        
-        plt_gene(ff_med,g,g_id) 
-    plt.ylim(0.8,1.2)
-    plt.title(find_celltype_from_id(k))
-    plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
-    plt.tight_layout()
-    plt.show()
+#######################################
+for g in intertested_genes:
+    print(g)
+    g_id=gene_symbol_to_id(g)[0]['ensembl']['gene']
+    plt.plot(ff_med[g_id],label=g)    
+    plt.xlabel("healthy to cancer")
+    plt.legend()
+#######################################    
     
     
+#plt.ylim(0.8,1.2)
+plt.title('celltype_3')
+plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
+plt.tight_layout()
+plt.show()
+    
+ff_med,ff_mean,ff_std = mean_traversal(k) 
 def plot_gene_expression_mean_std(gene_name_list,celltype_id):
-    k=celltype_id
-    ff_med,ff_mean,ff_std = mean_traversal(k)
+
     for g in gene_name_list:
         g_id=gene_symbol_to_id(g)[0]['ensembl']['gene']       
         #plt.plot(ff_med[g_id],label=g)

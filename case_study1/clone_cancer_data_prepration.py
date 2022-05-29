@@ -54,7 +54,7 @@ import numpy as np
 ant['celltype_ontology']!=np.nan
 
 
-m=sc_df.isin([0]).sum(axis=1)
+#m=sc_df.isin([0]).sum(axis=1)
 
 sc_df_filtered=sc_df.loc[ant['celltype_ontology'].notna(),list(zero_columns<60000)]
 sc_df_filtered.shape
@@ -81,12 +81,11 @@ df=pd.DataFrame({'celltype_ontology':list(ant['celltype_ontology'].unique()),
 ant=pd.merge(left=ant,right=df,how='left',on='celltype_ontology')
 ant.to_csv("./sc_annotations_final.csv",index=False)
 #############################
-sc_df_filtered2['cells']=ant['celltype_id']
+sc_df_filtered2['ID']=ant['celltype_id']
 sc_df_filtered2=sc_df_filtered2.rename(columns={'cells':'Y'})
 sc_df_filtered2.to_csv("./sc_counts_filtered_final.csv",index=False)
 #############################
 #############################
 ant=pd.read_csv("./sc_annotations_final.csv")
 sc_df_filtered2=pd.read_csv("./sc_counts_filtered_final.csv")
-
 ############
